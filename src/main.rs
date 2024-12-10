@@ -33,12 +33,14 @@ fn bundle(
     for line in reader.lines() {
         let line = line?;
         if let Some(caps) = re.captures(&line) {
-            let module = caps.get(1).unwrap().as_str();
+            let module = caps.get(2).unwrap().as_str();
+            let is_pub = caps.get(1).is_some();
 
             if mod_before {
                 res.push('\n');
             }
             res.push_str(&prefix);
+            if is_pub { res.push_str("pub "); }
             res.push_str(&format!("mod {} {{\n", module));
 
             let bndl = read_module(path, &name, module, depth, indent, re)?;
@@ -87,6 +89,8 @@ fn read_module(
     panic!();
 }
 
+const RE: &str = r"^\s*(pub\s+)?mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;.*$";
+
 fn main() -> io::Result<()> {
     let args: Args = argh::from_env();
     let entry = args.entry;
@@ -94,7 +98,7 @@ fn main() -> io::Result<()> {
     let indent = args.indent;
 
     let mut path = PathBuf::from(&entry);
-    let re = Regex::new(r"\s*mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
+    let re = Regex::new(RE).unwrap();
 
     let bndl = bundle(&mut path, 0, indent, &re)?;
 
