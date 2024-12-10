@@ -28,11 +28,16 @@ fn bundle(
     let reader = io::BufReader::new(file);
 
     let mut res = String::new();
+    let mut mod_before = false;
+
     for line in reader.lines() {
         let line = line?;
         if let Some(caps) = re.captures(&line) {
             let module = caps.get(1).unwrap().as_str();
 
+            if mod_before {
+                res.push('\n');
+            }
             res.push_str(&prefix);
             res.push_str(&format!("mod {} {{\n", module));
 
@@ -41,10 +46,14 @@ fn bundle(
 
             res.push_str(&prefix);
             res.push_str("}\n");
+
+            mod_before = true;
         } else {
             res.push_str(&prefix);
             res.push_str(&line);
             res.push('\n');
+
+            mod_before = false;
         }
     }
 
@@ -85,7 +94,7 @@ fn main() -> io::Result<()> {
     let indent = args.indent;
 
     let mut path = PathBuf::from(&entry);
-    let re = Regex::new(r"mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
+    let re = Regex::new(r"\s+mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
 
     let bndl = bundle(&mut path, 0, indent, &re)?;
 
