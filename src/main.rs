@@ -28,7 +28,6 @@ fn bundle(
     let reader = io::BufReader::new(file);
 
     let mut res = String::new();
-    let mut mod_before = false;
 
     for line in reader.lines() {
         let line = line?;
@@ -36,9 +35,6 @@ fn bundle(
             let module = caps.get(2).unwrap().as_str();
             let is_pub = caps.get(1).is_some();
 
-            if mod_before {
-                res.push('\n');
-            }
             res.push_str(&prefix);
             if is_pub { res.push_str("pub "); }
             res.push_str(&format!("mod {} {{\n", module));
@@ -48,14 +44,10 @@ fn bundle(
 
             res.push_str(&prefix);
             res.push_str("}\n");
-
-            mod_before = true;
         } else {
             res.push_str(&prefix);
             res.push_str(&line);
             res.push('\n');
-
-            mod_before = false;
         }
     }
 
