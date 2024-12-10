@@ -94,7 +94,7 @@ fn main() -> io::Result<()> {
     let indent = args.indent;
 
     let mut path = PathBuf::from(&entry);
-    let re = Regex::new(r"\s+mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
+    let re = Regex::new(r"\s*mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
 
     let bndl = bundle(&mut path, 0, indent, &re)?;
 
