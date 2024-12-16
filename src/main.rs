@@ -4,6 +4,7 @@ use regex::Regex;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 #[derive(FromArgs)]
 #[argh(description = "bndl")]
@@ -19,7 +20,7 @@ struct Args {
 }
 
 fn bundle(
-    path: &mut PathBuf, depth: usize, indent: usize, re: &Regex,
+    path: &mut PathBuf, depth: usize, indent: usize,
 ) -> io::Result<String> {
     let name = path.file_name().unwrap().to_str().unwrap().to_string();
     let prefix = " ".repeat(indent * depth);
@@ -31,15 +32,29 @@ fn bundle(
 
     for line in reader.lines() {
         let line = line?;
-        if let Some(caps) = re.captures(&line) {
-            let module = caps.get(2).unwrap().as_str();
+        let args = RE_ARG.captures_iter(&line)
+            .map(|c| c[1].to_string())
+            .collect::<Vec<_>>();
+
+        let is_ignore = args.contains(&"ignore".to_string());
+
+        if is_ignore {
+            res.push_str(&prefix);
+            res.push_str("// ");
+            res.push_str(&RE_PURE.captures(&line).unwrap()[1]);
+            res.push('\n');
+            continue;
+        }
+
+        if let Some(caps) = RE_MOD.captures(&line) {
+            let module = &caps[2];
             let is_pub = caps.get(1).is_some();
 
             res.push_str(&prefix);
             if is_pub { res.push_str("pub "); }
             res.push_str(&format!("mod {} {{\n", module));
 
-            let bndl = read_module(path, &name, module, depth, indent, re)?;
+            let bndl = read_module(path, &name, module, depth, indent)?;
             res.push_str(&bndl);
 
             res.push_str(&prefix);
@@ -56,12 +71,12 @@ fn bundle(
 
 fn read_module(
     path: &mut PathBuf, name: &str, module: &str,
-    depth: usize, indent: usize, re: &Regex,
+    depth: usize, indent: usize,
 ) -> io::Result<String> {
     path.pop();
     path.push(format!("{}.rs", module));
     if path.exists() {
-        let res = bundle(path, depth + 1, indent, re)?;
+        let res = bundle(path, depth + 1, indent)?;
         path.pop();
         path.push(name);
         return Ok(res);
@@ -71,7 +86,7 @@ fn read_module(
     path.push(module);
     path.push("mod.rs");
     if path.exists() {
-        let res = bundle(path, depth + 1, indent, re)?;
+        let res = bundle(path, depth + 1, indent)?;
         path.pop();
         path.pop();
         path.push(name);
@@ -81,7 +96,17 @@ fn read_module(
     panic!();
 }
 
-const RE: &str = r"^\s*(pub\s+)?mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;.*$";
+static RE_MOD: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+    r"^\s*(pub\s+)?mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;.*$"
+).unwrap());
+
+static RE_ARG: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+    r"//.*@(\S+)"
+).unwrap());
+
+static RE_PURE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+    r"^\s*(.*?)\s*//"
+).unwrap());
 
 fn main() -> io::Result<()> {
     let args: Args = argh::from_env();
@@ -90,9 +115,7 @@ fn main() -> io::Result<()> {
     let indent = args.indent;
 
     let mut path = PathBuf::from(&entry);
-    let re = Regex::new(RE).unwrap();
-
-    let bndl = bundle(&mut path, 0, indent, &re)?;
+    let bndl = bundle(&mut path, 0, indent)?;
 
     let mut file = File::create(&output)?;
     file.write_all(bndl.as_bytes())?;
