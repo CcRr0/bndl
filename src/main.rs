@@ -32,7 +32,7 @@ fn bundle(
 
     for line in reader.lines() {
         let line = line?;
-        let args = RE_ARG.captures_iter(&line)
+        let args = RE_ARGS.captures_iter(&line)
             .map(|c| c[1].to_string())
             .collect::<Vec<_>>();
 
@@ -60,8 +60,10 @@ fn bundle(
             res.push_str(&prefix);
             res.push_str("}\n");
         } else {
-            res.push_str(&prefix);
-            res.push_str(&line);
+            if !line.is_empty() {
+                res.push_str(&prefix);
+                res.push_str(&line);
+            }
             res.push('\n');
         }
     }
@@ -100,7 +102,7 @@ static RE_MOD: LazyLock<Regex> = LazyLock::new(|| Regex::new(
     r"^\s*(pub\s+)?mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;.*$"
 ).unwrap());
 
-static RE_ARG: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+static RE_ARGS: LazyLock<Regex> = LazyLock::new(|| Regex::new(
     r"//.*@(\S+)"
 ).unwrap());
 
