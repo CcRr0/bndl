@@ -3,6 +3,7 @@ use regex::Regex;
 
 use std::fs::File;
 use std::io::{self, BufRead, Write};
+use std::process::{Command, Stdio};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -12,11 +13,16 @@ struct Args {
     #[argh(positional, description = "entry")]
     entry: String,
 
-    #[argh(option, short = 'o', description = "output")]
-    output: String,
-
     #[argh(option, short = 'i', default = "4", description = "indent")]
     indent: usize,
+}
+
+macro_rules! regex {
+    ($name:ident, $re:expr) => {
+        static $name: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new($re).unwrap()
+        });
+    };
 }
 
 fn bundle(
@@ -30,6 +36,7 @@ fn bundle(
 
     let mut res = String::new();
 
+    let mut flag = false;
     for line in reader.lines() {
         let line = line?;
         let args = RE_ARGS.captures_iter(&line)
@@ -37,12 +44,8 @@ fn bundle(
             .collect::<Vec<_>>();
 
         let is_ignore = args.contains(&"ignore".to_string());
-
         if is_ignore {
-            res.push_str(&prefix);
-            res.push_str("// ");
-            res.push_str(&RE_PURE.captures(&line).unwrap()[1]);
-            res.push('\n');
+            flag = true;
             continue;
         }
 
@@ -55,7 +58,18 @@ fn bundle(
             res.push_str(&format!("mod {} {{\n", module));
 
             let bndl = read_module(path, &name, module, depth, indent)?;
-            res.push_str(&bndl);
+            let lines = bndl.lines().collect::<Vec<_>>();
+
+            let start = lines.iter()
+                .position(|li| !li.trim().is_empty())
+                .unwrap_or(0);
+            let end = lines.iter()
+                .rposition(|li| !li.trim().is_empty())
+                .unwrap_or(lines.len() - 1);
+            for line in &lines[start..=end] {
+                res.push_str(line);
+                res.push('\n');
+            }
 
             res.push_str(&prefix);
             res.push_str("}\n");
@@ -64,8 +78,12 @@ fn bundle(
                 res.push_str(&prefix);
                 res.push_str(&line);
             }
-            res.push('\n');
+            if !flag {
+                res.push('\n');
+            }
         }
+
+        flag = false;
     }
 
     Ok(res)
@@ -98,29 +116,27 @@ fn read_module(
     panic!();
 }
 
-static RE_MOD: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-    r"^\s*(pub\s+)?mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;.*$"
-).unwrap());
+fn pbcopy(src: &str) -> io::Result<()> {
+    let mut child = Command::new("pbcopy")
+        .stdin(Stdio::piped())
+        .spawn()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(src.as_bytes())?;
+    }
+    child.wait()?;
+    Ok(())
+}
 
-static RE_ARGS: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-    r"//.*@(\S+)"
-).unwrap());
-
-static RE_PURE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-    r"^\s*(.*?)\s*//"
-).unwrap());
+regex!(RE_MOD, r"^\s*(pub\s+)?mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;.*$");
+regex!(RE_ARGS, r"//.*@(\S+)");
 
 fn main() -> io::Result<()> {
-    let args: Args = argh::from_env();
-    let entry = args.entry;
-    let output = args.output;
-    let indent = args.indent;
+    let args = argh::from_env::<Args>();
+    let Args { entry, indent } = args;
 
     let mut path = PathBuf::from(&entry);
     let bndl = bundle(&mut path, 0, indent)?;
 
-    let mut file = File::create(&output)?;
-    file.write_all(bndl.as_bytes())?;
-
+    pbcopy(&bndl)?;
     Ok(())
 }
