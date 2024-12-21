@@ -43,9 +43,9 @@ pub fn bundle(
                 .position(|li| !li.trim().is_empty())
                 .unwrap_or(0);
             let end = lines.iter()
-                .rposition(|li| !li.trim().is_empty())
-                .unwrap_or(lines.len() - 1);
-            for line in &lines[start..=end] {
+                .rposition(|li| !li.trim().is_empty()).map(|i| i + 1)
+                .unwrap_or(lines.len());
+            for line in &lines[start..end] {
                 res.push_str(line);
                 res.push('\n');
             }
